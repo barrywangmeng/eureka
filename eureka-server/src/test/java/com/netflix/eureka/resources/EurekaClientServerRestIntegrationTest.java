@@ -74,6 +74,7 @@ public class EurekaClientServerRestIntegrationTest {
     public static void setUp() throws Exception {
         injectEurekaConfiguration();
         startServer();
+
         createEurekaServerConfig();
 
         httpClientFactory = JerseyEurekaHttpClientFactory.newBuilder()
