@@ -16,14 +16,6 @@
 
 package com.netflix.eureka.registry;
 
-import java.net.URI;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.List;
-import java.util.Timer;
-import java.util.TimerTask;
-
 import com.netflix.appinfo.AmazonInfo;
 import com.netflix.appinfo.AmazonInfo.MetaDataKey;
 import com.netflix.appinfo.ApplicationInfoManager;
@@ -36,31 +28,42 @@ import com.netflix.discovery.EurekaClient;
 import com.netflix.discovery.EurekaClientConfig;
 import com.netflix.discovery.shared.Application;
 import com.netflix.discovery.shared.Applications;
-import com.netflix.eureka.registry.rule.DownOrStartingRule;
-import com.netflix.eureka.registry.rule.FirstMatchWinsCompositeRule;
-import com.netflix.eureka.registry.rule.InstanceStatusOverrideRule;
-import com.netflix.eureka.registry.rule.LeaseExistsRule;
-import com.netflix.eureka.registry.rule.OverrideExistsRule;
-import com.netflix.eureka.resources.CurrentRequestVersion;
 import com.netflix.eureka.EurekaServerConfig;
 import com.netflix.eureka.Version;
 import com.netflix.eureka.cluster.PeerEurekaNode;
 import com.netflix.eureka.cluster.PeerEurekaNodes;
 import com.netflix.eureka.lease.Lease;
+import com.netflix.eureka.registry.rule.DownOrStartingRule;
+import com.netflix.eureka.registry.rule.FirstMatchWinsCompositeRule;
+import com.netflix.eureka.registry.rule.InstanceStatusOverrideRule;
+import com.netflix.eureka.registry.rule.LeaseExistsRule;
+import com.netflix.eureka.registry.rule.OverrideExistsRule;
 import com.netflix.eureka.resources.ASGResource.ASGStatus;
+import com.netflix.eureka.resources.CurrentRequestVersion;
 import com.netflix.eureka.resources.ServerCodecs;
 import com.netflix.eureka.util.MeasuredRate;
 import com.netflix.servo.DefaultMonitorRegistry;
 import com.netflix.servo.annotations.DataSourceType;
 import com.netflix.servo.monitor.Monitors;
 import com.netflix.servo.monitor.Stopwatch;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.net.URI;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
 
 /**
+ * 这个eureka server启动的时候，会尝试从其他的eureka server上抓取注册表的信息，
+ * 如果抓取失败了，那么就不会让其他的服务实例来自己这里进行服务发现，获取自己的注册表信息
  * Handles replication of all operations to {@link AbstractInstanceRegistry} to peer
  * <em>Eureka</em> nodes to keep them all in sync.
  *
@@ -69,6 +72,7 @@ import javax.inject.Singleton;
  * <em>Registers,Renewals,Cancels,Expirations and Status Changes</em>
  * </p>
  *
+ * 如果当前eureka server获取心跳的比例低于一定的比例的话，就开启自我保护模式
  * <p>
  * When the eureka server starts up it tries to fetch all the registry
  * information from the peer eureka nodes.If for some reason this operation
