@@ -360,6 +360,7 @@ public class DiscoveryClient implements EurekaClient {
             } catch (Exception e) {
                 logger.warn("Transport initialization failure", e);
             }
+            // 将newRegistrationClient放入到eurekaTransport中
             eurekaTransport.registrationClientFactory = newRegistrationClientFactory;
             eurekaTransport.registrationClient = newRegistrationClient;
         }
