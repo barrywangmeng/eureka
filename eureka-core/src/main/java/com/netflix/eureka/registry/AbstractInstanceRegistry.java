@@ -16,7 +16,25 @@
 
 package com.netflix.eureka.registry;
 
-import javax.annotation.Nullable;
+import com.google.common.cache.CacheBuilder;
+import com.netflix.appinfo.InstanceInfo;
+import com.netflix.appinfo.InstanceInfo.ActionType;
+import com.netflix.appinfo.InstanceInfo.InstanceStatus;
+import com.netflix.appinfo.LeaseInfo;
+import com.netflix.discovery.EurekaClientConfig;
+import com.netflix.discovery.shared.Application;
+import com.netflix.discovery.shared.Applications;
+import com.netflix.discovery.shared.Pair;
+import com.netflix.eureka.EurekaServerConfig;
+import com.netflix.eureka.lease.Lease;
+import com.netflix.eureka.registry.rule.InstanceStatusOverrideRule;
+import com.netflix.eureka.resources.ServerCodecs;
+import com.netflix.eureka.util.MeasuredRate;
+import com.netflix.servo.annotations.DataSourceType;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
@@ -40,25 +58,20 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import com.google.common.cache.CacheBuilder;
-import com.netflix.appinfo.InstanceInfo;
-import com.netflix.appinfo.InstanceInfo.ActionType;
-import com.netflix.appinfo.InstanceInfo.InstanceStatus;
-import com.netflix.appinfo.LeaseInfo;
-import com.netflix.discovery.EurekaClientConfig;
-import com.netflix.discovery.shared.Application;
-import com.netflix.discovery.shared.Applications;
-import com.netflix.discovery.shared.Pair;
-import com.netflix.eureka.EurekaServerConfig;
-import com.netflix.eureka.lease.Lease;
-import com.netflix.eureka.registry.rule.InstanceStatusOverrideRule;
-import com.netflix.eureka.resources.ServerCodecs;
-import com.netflix.eureka.util.MeasuredRate;
-import com.netflix.servo.annotations.DataSourceType;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import javax.annotation.Nullable;
 
-import static com.netflix.eureka.util.EurekaMonitors.*;
+import static com.netflix.eureka.util.EurekaMonitors.CANCEL;
+import static com.netflix.eureka.util.EurekaMonitors.CANCEL_NOT_FOUND;
+import static com.netflix.eureka.util.EurekaMonitors.EXPIRED;
+import static com.netflix.eureka.util.EurekaMonitors.GET_ALL_CACHE_MISS;
+import static com.netflix.eureka.util.EurekaMonitors.GET_ALL_CACHE_MISS_DELTA;
+import static com.netflix.eureka.util.EurekaMonitors.GET_ALL_WITH_REMOTE_REGIONS_CACHE_MISS;
+import static com.netflix.eureka.util.EurekaMonitors.GET_ALL_WITH_REMOTE_REGIONS_CACHE_MISS_DELTA;
+import static com.netflix.eureka.util.EurekaMonitors.REGISTER;
+import static com.netflix.eureka.util.EurekaMonitors.RENEW;
+import static com.netflix.eureka.util.EurekaMonitors.RENEW_NOT_FOUND;
+import static com.netflix.eureka.util.EurekaMonitors.STATUS_OVERRIDE_DELETE;
+import static com.netflix.eureka.util.EurekaMonitors.STATUS_UPDATE;
 
 /**
  * Handles all registry requests from eureka clients.
@@ -585,6 +598,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     public void evict(long additionalLeaseMs) {
         logger.debug("Running the evict task");
 
+        // 是否允许主动删除宕机节点数据
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;
@@ -1251,6 +1265,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         @Override
         public void run() {
             try {
+            	// 获取补偿时间 可能大于0
                 long compensationTimeMs = getCompensationTimeMs();
                 logger.info("Running the evict task with compensationTime {}ms", compensationTimeMs);
                 evict(compensationTimeMs);
@@ -1266,13 +1281,25 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
          * according to the configured cycle.
          */
         long getCompensationTimeMs() {
-            long currNanos = getCurrentTimeNano();
+        	// 第一次进来先获取当前时间 currNanos=20:00:00
+			// 第二次过来，此时currNanos=20:01:00
+			// 第三次过来，currNanos=20:03:00才过来，本该60s调度一次的，由于fullGC或者其他原因，到了这个时间点没执行
+			long currNanos = getCurrentTimeNano();
+
+            // 获取上一次这个EvictionTask执行的时间 getAndSet ：以原子方式设置为给定值，并返回以前的值
+			// 第一次 将20:00:00 设置到lastNanos，然后return 0
+			// 第二次过来后，拿到的lastNanos为20:00:00
+			// 第三次过来，拿到的lastNanos为20:01:00
             long lastNanos = lastExecutionNanosRef.getAndSet(currNanos);
             if (lastNanos == 0l) {
                 return 0l;
             }
 
+            // 第二次进来，计算elapsedMs = 60s
+			// 第三次进来，计算elapsedMs = 120s
             long elapsedMs = TimeUnit.NANOSECONDS.toMillis(currNanos - lastNanos);
+            // 第二次进来，配置的服务驱逐间隔默认时间为60s，计算的补偿时间compensationTime=0
+            // 第三次进来，配置的服务驱逐间隔默认时间为60s，计算的补偿时间compensationTime=60s
             long compensationTime = elapsedMs - serverConfig.getEvictionIntervalTimerInMs();
             return compensationTime <= 0l ? 0l : compensationTime;
         }
