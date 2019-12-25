@@ -236,6 +236,22 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                         // Since the client wants to cancel it, reduce the threshold
                         // (1
                         // for 30 seconds, 2 for a minute)
+						// 关于一分钟心跳个数的计算，自我保护机制会用到这个属性
+						// 看看eureka 自己的注释：for 30 seconds, 2 for a minute， 看完之后满脸问号？？
+						// 和自我保护机制源码那里一样，作者认为用户不会改变自我保护默认时间配置(30s)， 如果修改了这个配置时间后 这里就会出问题
+						/**
+						 * 同样看了master分支源码，这里做了调整：
+						 * this.expectedNumberOfClientsSendingRenews = this.expectedNumberOfClientsSendingRenews + 1;
+						 * updateRenewsPerMinThreshold();
+						 *
+						 * 主要是看 updateRenewsPerMinThreshold 方法：
+						 * this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews
+						 *                 * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds())
+						 *                 * serverConfig.getRenewalPercentThreshold());
+						 *
+						 * 这里完全是读取用户自己配置的心跳检查时间，然后用60s / 配置时间
+						 */
+
                         this.expectedNumberOfRenewsPerMin = this.expectedNumberOfRenewsPerMin + 2;
                         this.numberOfRenewsPerMinThreshold =
                                 (int) (this.expectedNumberOfRenewsPerMin * serverConfig.getRenewalPercentThreshold());

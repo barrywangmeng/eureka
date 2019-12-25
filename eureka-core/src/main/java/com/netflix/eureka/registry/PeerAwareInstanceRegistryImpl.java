@@ -224,6 +224,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
             for (Application app : apps.getRegisteredApplications()) {
                 for (InstanceInfo instance : app.getInstances()) {
                     try {
+						// isRegisterable：是否可以在当前服务实例所在的注册中心注册。这个方法一定返回true，那么count就是相邻注册中心所有服务实例数量
                         if (isRegisterable(instance)) {
                             register(instance, instance.getLeaseInfo().getDurationInSecs(), true);
                             count++;
@@ -240,7 +241,18 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     @Override
     public void openForTraffic(ApplicationInfoManager applicationInfoManager, int count) {
         // Renewals happen every 30 seconds and for a minute it should be a factor of 2.
+		// 如果有20个服务实例，乘以2 代表需要40次心跳
+		// 这里有bug，count * 2 是硬编码，作者是不是按照心跳时间30秒计算的？所以计算一分钟得心跳就是 * 2，但是心跳时间是可以自己配置修改的
+		// 看了master源码，这一块已经改为：
+		/**
+		 * this.expectedNumberOfClientsSendingRenews = this.expectedNumberOfClientsSendingRenews + 1;
+		 * updateRenewsPerMinThreshold();
+		 * 主要是看 updateRenewsPerMinThreshold 方法：
+		 * this.numberOfRenewsPerMinThreshold = (int) (this.expectedNumberOfClientsSendingRenews * (60.0 / serverConfig.getExpectedClientRenewalIntervalSeconds() * serverConfig.getRenewalPercentThreshold());
+		 * 这里完全是读取用户自己配置的心跳检查时间，然后用60s / 配置时间
+		 */
         this.expectedNumberOfRenewsPerMin = count * 2;
+        // numberOfRenewsPerMinThreshold = count * 2 * 0.85 = 34 期望一分钟 20个服务实例，得有34个心跳
         this.numberOfRenewsPerMinThreshold =
                 (int) (this.expectedNumberOfRenewsPerMin * serverConfig.getRenewalPercentThreshold());
         logger.info("Got " + count + " instances from neighboring DS node");
@@ -487,6 +499,10 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
             // The self preservation mode is disabled, hence allowing the instances to expire.
             return true;
         }
+
+        // 这行代码触发自我保护机制，期望的一分钟要有多少次心跳发送过来，所有服务实例一分钟得发送多少次心跳
+		// getNumOfRenewsInLastMin 上一分钟所有服务实例一共发送过来多少心跳，10次
+		// 如果上一分钟 的心跳次数太少了（20次）< 我期望的100次，此时会返回false
         return numberOfRenewsPerMinThreshold > 0 && getNumOfRenewsInLastMin() > numberOfRenewsPerMinThreshold;
     }
 
@@ -525,6 +541,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
      */
     private void updateRenewalThreshold() {
         try {
+        	// count为注册表中服务实例的个数
             Applications apps = eurekaClient.getApplications();
             int count = 0;
             for (Application app : apps.getRegisteredApplications()) {
@@ -537,6 +554,7 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
             synchronized (lock) {
                 // Update threshold only if the threshold is greater than the
                 // current expected threshold of if the self preservation is disabled.
+				// 一分钟服务实例心跳个数 > 一分钟所有服务实例实际心跳次数 * 0.85  这里代表是正常心跳的情况
                 if ((count * 2) > (serverConfig.getRenewalPercentThreshold() * numberOfRenewsPerMinThreshold)
                         || (!this.isSelfPreservationModeEnabled())) {
                     this.expectedNumberOfRenewsPerMin = count * 2;
