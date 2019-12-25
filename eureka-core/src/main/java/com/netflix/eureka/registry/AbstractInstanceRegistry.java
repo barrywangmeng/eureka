@@ -409,6 +409,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
                     instanceInfo.setStatusWithoutDirty(overriddenInstanceStatus);
                 }
             }
+            // 记录每一分钟实际心跳个数
             renewsLastMin.increment();
             leaseToRenew.renew();
             return true;
@@ -614,7 +615,7 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
     public void evict(long additionalLeaseMs) {
         logger.debug("Running the evict task");
 
-        // 是否允许主动删除宕机节点数据
+        // 是否允许主动删除宕机节点数据，这里判断是否进入自我保护机制，如果是自我保护了则不允许摘除服务
         if (!isLeaseExpirationEnabled()) {
             logger.debug("DS: lease expiration is currently disabled.");
             return;

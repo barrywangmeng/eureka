@@ -542,6 +542,8 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     private void updateRenewalThreshold() {
         try {
         	// count为注册表中服务实例的个数
+			// 将自己作为eureka client，从其他eureka server拉取注册表
+			// 合并到自己本地去 将从别的eureka server拉取到的服务实例的数量作为count
             Applications apps = eurekaClient.getApplications();
             int count = 0;
             for (Application app : apps.getRegisteredApplications()) {
@@ -554,7 +556,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
             synchronized (lock) {
                 // Update threshold only if the threshold is greater than the
                 // current expected threshold of if the self preservation is disabled.
-				// 一分钟服务实例心跳个数 > 一分钟所有服务实例实际心跳次数 * 0.85  这里代表是正常心跳的情况
+				// 这里也是存在bug的，master分支已经修复
+				// 一分钟服务实例心跳个数(其他eureka server拉取的服务实例个数 * 2) > 自己本身一分钟所有服务实例实际心跳次数 * 0.85(阈值)
+				// 这里主要是跟其他的eureka server去做一下同步
                 if ((count * 2) > (serverConfig.getRenewalPercentThreshold() * numberOfRenewsPerMinThreshold)
                         || (!this.isSelfPreservationModeEnabled())) {
                     this.expectedNumberOfRenewsPerMin = count * 2;

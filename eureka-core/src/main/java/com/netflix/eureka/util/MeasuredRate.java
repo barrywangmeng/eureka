@@ -15,12 +15,12 @@
  */
 package com.netflix.eureka.util;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.atomic.AtomicLong;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 /**
  * Utility class for getting a count in last X milliseconds.
@@ -54,6 +54,8 @@ public class MeasuredRate {
                 public void run() {
                     try {
                         // Zero out the current bucket.
+						// renewsLastMin 为1分钟
+						// 每分钟调度一次，将当前的88次总心跳设置到lastBucket中去，然后将当前的currentBucket 设置为0 秒啊！
                         lastBucket.set(currentBucket.getAndSet(0));
                     } catch (Throwable e) {
                         logger.error("Cannot reset the Measured Rate", e);
@@ -83,6 +85,7 @@ public class MeasuredRate {
      * Increments the count in the current sample interval.
      */
     public void increment() {
+    	// 心跳次数+1 例如说1分钟所有服务实例共发起了88次心跳
         currentBucket.incrementAndGet();
     }
 }
