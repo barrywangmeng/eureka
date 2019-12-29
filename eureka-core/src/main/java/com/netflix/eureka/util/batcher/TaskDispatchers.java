@@ -40,13 +40,17 @@ public class TaskDispatchers {
                                                                              long congestionRetryDelayMs,
                                                                              long networkFailureRetryMs,
                                                                              TaskProcessor<T> taskProcessor) {
+    	// 初始化AcceptorExecutor() 会启动一个后台线程：AcceptorRunner，这里面处理batchWorkQueue
         final AcceptorExecutor<ID, T> acceptorExecutor = new AcceptorExecutor<>(
                 id, maxBufferSize, workloadSize, maxBatchingDelay, congestionRetryDelayMs, networkFailureRetryMs
         );
+        // taskProcessor为ReplicationTaskProcessor，这里会执行ReplicationTaskProcessor中的#process()
+		// 最后是发送一个replicationClient.submitBatchUpdates请求
         final TaskExecutors<ID, T> taskExecutor = TaskExecutors.batchExecutors(id, workerCount, taskProcessor, acceptorExecutor);
         return new TaskDispatcher<ID, T>() {
             @Override
             public void process(ID id, T task, long expiryTime) {
+            	// 构建第一层队列：acceptorQueue
                 acceptorExecutor.process(id, task, expiryTime);
             }
 

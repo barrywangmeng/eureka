@@ -1,5 +1,17 @@
 package com.netflix.eureka.util.batcher;
 
+import com.netflix.eureka.util.batcher.TaskProcessor.ProcessingResult;
+import com.netflix.servo.annotations.DataSourceType;
+import com.netflix.servo.annotations.Monitor;
+import com.netflix.servo.monitor.MonitorConfig;
+import com.netflix.servo.monitor.Monitors;
+import com.netflix.servo.monitor.StatsTimer;
+import com.netflix.servo.monitor.Timer;
+import com.netflix.servo.stats.StatsConfig;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.util.ArrayList;
 import java.util.Deque;
 import java.util.HashMap;
@@ -13,17 +25,6 @@ import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-
-import com.netflix.eureka.util.batcher.TaskProcessor.ProcessingResult;
-import com.netflix.servo.annotations.DataSourceType;
-import com.netflix.servo.annotations.Monitor;
-import com.netflix.servo.monitor.MonitorConfig;
-import com.netflix.servo.monitor.Monitors;
-import com.netflix.servo.monitor.StatsTimer;
-import com.netflix.servo.monitor.Timer;
-import com.netflix.servo.stats.StatsConfig;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.netflix.eureka.Names.METRIC_REPLICATION_PREFIX;
 
@@ -120,6 +121,7 @@ class AcceptorExecutor<ID, T> {
     }
 
     void process(ID id, T task, long expiryTime) {
+    	// 将请求都放入到acceptorQueue中
         acceptorQueue.add(new TaskHolder<ID, T>(id, task, expiryTime));
         acceptedTasks++;
     }
@@ -183,6 +185,7 @@ class AcceptorExecutor<ID, T> {
             long scheduleTime = 0;
             while (!isShutdown.get()) {
                 try {
+                	// 处理acceptorQueue队列中的数据
                     drainInputQueues();
 
                     int totalItems = processingOrder.size();
@@ -192,6 +195,7 @@ class AcceptorExecutor<ID, T> {
                         scheduleTime = now + trafficShaper.transmissionDelay();
                     }
                     if (scheduleTime <= now) {
+                    	// 将processingOrder拆分成一个个batch，然后进行操作
                         assignBatchWork();
                         assignSingleItemWork();
                     }
@@ -233,6 +237,7 @@ class AcceptorExecutor<ID, T> {
 
         private void drainAcceptorQueue() {
             while (!acceptorQueue.isEmpty()) {
+            	// 将acceptor队列中的数据放入到processingOrder队列中去，方便后续拆分成batch
                 appendTaskHolder(acceptorQueue.poll());
             }
         }
@@ -307,6 +312,7 @@ class AcceptorExecutor<ID, T> {
                         batchWorkRequests.release();
                     } else {
                         batchSizeMetric.record(holders.size(), TimeUnit.MILLISECONDS);
+                        // 将批量数据放入到batchWorkQueue中
                         batchWorkQueue.add(holders);
                     }
                 }
@@ -317,11 +323,13 @@ class AcceptorExecutor<ID, T> {
             if (processingOrder.isEmpty()) {
                 return false;
             }
+            // 默认maxBufferSize为250
             if (pendingTasks.size() >= maxBufferSize) {
                 return true;
             }
 
             TaskHolder<ID, T> nextHolder = pendingTasks.get(processingOrder.peek());
+            // 默认maxBatchingDelay为500ms
             long delay = System.currentTimeMillis() - nextHolder.getSubmitTimestamp();
             return delay >= maxBatchingDelay;
         }

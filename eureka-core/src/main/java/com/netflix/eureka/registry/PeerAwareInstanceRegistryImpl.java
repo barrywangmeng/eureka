@@ -214,6 +214,9 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
         for (int i = 0; ((i < serverConfig.getRegistrySyncRetries()) && (count == 0)); i++) {
             if (i > 0) {
                 try {
+                	// 如果第一次没有在自己本地的eureka client中获取到注册表
+					// 说明自己本地eureka client还没有从任何其他的eureka server上获取注册表
+					// 所以此时重试，等待30s
                     Thread.sleep(serverConfig.getRegistrySyncRetryWaitMs());
                 } catch (InterruptedException e) {
                     logger.warn("Interrupted during registry transfer..");
