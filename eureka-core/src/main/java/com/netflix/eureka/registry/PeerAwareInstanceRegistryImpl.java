@@ -604,15 +604,15 @@ public class PeerAwareInstanceRegistryImpl extends AbstractInstanceRegistry impl
     @com.netflix.servo.annotations.Monitor(name = "isBelowRenewThreshold", description = "0 = false, 1 = true",
             type = com.netflix.servo.annotations.DataSourceType.GAUGE)
     @Override
-    public int isBelowRenewThresold() {
-        if ((getNumOfRenewsInLastMin() <= numberOfRenewsPerMinThreshold)
-                &&
-                ((this.startupTime > 0) && (System.currentTimeMillis() > this.startupTime + (serverConfig.getWaitTimeInMsWhenSyncEmpty())))) {
-            return 1;
-        } else {
-            return 0;
-        }
-    }
+		public int isBelowRenewThresold() {
+			if ((getNumOfRenewsInLastMin() <= numberOfRenewsPerMinThreshold)
+					&&
+					((this.startupTime > 0) && (System.currentTimeMillis() > this.startupTime + (serverConfig.getWaitTimeInMsWhenSyncEmpty())))) {
+				return 1;
+			} else {
+				return 0;
+			}
+		}
 
     /**
      * Checks if an instance is registerable in this region. Instances from other regions are rejected.

@@ -663,6 +663,14 @@ public abstract class AbstractInstanceRegistry implements InstanceRegistry {
         }
     }
 
+	public static void main(String[] args) {
+		int evictCount = 15;
+		Random random = new Random(System.currentTimeMillis());
+		for (int i = 0; i < evictCount; i++) {
+			int next = i + random.nextInt(evictCount - i);
+			System.out.println(next);
+		}
+	}
 
     /**
      * Returns the given app that is in this instance only, falling back to other regions transparently only
